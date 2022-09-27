@@ -1,0 +1,59 @@
+{
+    "domain.org mailer": {
+        "disabled": false,
+        
+        "email": "dispatch@domain.org",
+        "password": "<PASSWORD>",
+        
+        "subject": "Mailing list",
+        "url-prefix": "https://domain.org/message-dispatcher",
+        
+        "attachments-dir": "attachments",
+        
+        "sources": [
+            "author@domain.org"
+        ],
+        
+        "imap": "mail.domain.org:993/imap/ssl/novalidate-cert",
+        "viber-bot": "0123456789abcdef-fedcba9876543210-0e2c4a6886a4c2e0",
+        "tg-bot": "5432101234:AAbbCCddEEffGGhhIIjjKKllMMooPPqqRRssT"
+    },
+    
+    "domain.org tester": {
+        "disabled": true,
+        
+        "email": "test@domain.org",
+        "password": "<PASSWORD>",
+        
+        "subject": "Testing mailing list",
+        "url-prefix": "https://domain.org/message-dispatcher",
+        
+        "attachments-dir": "attachments",
+        
+        "ftp": {
+            "dir": "www/domain.org/message-dispatcher/attachments",
+            "host": "domain.org",
+            "username": "<USERNAME>",
+            "password": "<PASSWORD>"
+        },
+        "smtp": {
+            "host": "mail.domain.org",
+            "port": 465,
+            "ssl": {
+                "verify_peer": true,
+                "verify_depth": 3,
+                "allow_self_signed": true,
+                "peer_name": "mail.domain.org"
+            }
+        },
+        
+        "sources": [
+            "author@domain.org"
+        ],
+        
+        "imap": "mail.domain.org:993/imap/ssl/novalidate-cert",
+        "viber-bot": "0123456789abcdef-fedcba9876543210-0e2c4a6886a4c2e0",
+        "viber-chat": "0e2c4a6886a4c2e0-fedcba9876543210-0123456789abcdef",
+        "tg-bot": "5432101234:AAbbCCddEEffGGhhIIjjKKllMMooPPqqRRssT"
+    }
+}
