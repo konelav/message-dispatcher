@@ -14,6 +14,8 @@
             "author@domain.org"
         ],
         
+        "viber_bot_welcome_message": "Please, subscribe by 'Receive messages' button",
+        
         "imap": "mail.domain.org:993/imap/ssl/novalidate-cert",
         "viber-bot": "0123456789abcdef-fedcba9876543210-0e2c4a6886a4c2e0",
         "tg-bot": "5432101234:AAbbCCddEEffGGhhIIjjKKllMMooPPqqRRssT"

@@ -65,6 +65,8 @@ instance. Available options to be configured:
 11. `viber-bot`: (optional) auth token for Viber Bot API;
 12. `viber-chat`: (optional) auth token for Viber Channel Post API;
 13. `tg-bot`: (optional) auth token for Telegram Bot API;
+14. `viber_bot_welcome_message`: (optional) message that will be sent
+    when conversation started with new unsubscribed user.
 
 
 Other settings

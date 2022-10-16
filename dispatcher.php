@@ -636,7 +636,10 @@ function send_mail_generic($mbox, $mailer, $from, $to, $subject, $text, $files =
  * API call helpers *
  ********************/
 function http_json_call( $url, $data, $headers = [], $loglevel = 4 ) {
-    $content = json_encode( $data, JSON_UNESCAPED_UNICODE );
+    if ( is_null( $data ) || count( $data ) == 0 )
+        $content = '{}';
+    else
+        $content = json_encode( $data, JSON_UNESCAPED_UNICODE );
     tolog( __FILE__, __LINE__, 'http_json_call(' . $url . ', ' . $content . ')', $loglevel );
     $header = "Content-type: application/json\r\n";
     foreach ($headers as $key => $value)
@@ -937,6 +940,19 @@ function viber_handle_webhook( $headers, $body ) {
             if ( ($key = array_search($uid, $subs)) !== false ) {
                 log_info( __FILE__, __LINE__, 'Remove subscriber for ' . $dispatcher . ': ' . $uid);
                 $changes[] = ['unset' => [$dispatcher => ['viber-bot-subs' => [ $uid ]]]];
+            }
+        }
+        elseif ( ( $message[ 'event' ] == 'conversation_started' ) &&
+                  !is_null( $welcome = $config[ 'viber_bot_welcome_message' ] ?? null ) ) {
+            $uid = $message[ 'user_id' ];
+            if ( ! in_array( $uid, $subs ) ) {
+                log_info( __FILE__, __LINE__, 'Add new subscriber for ' . $dispatcher . ': ' . $uid);
+                $response = [
+                    'type' => 'text',
+                    'sender' => ['name' => $dispatcher],
+                    'text' => $welcome
+                ];
+                echo ( json_encode( $response, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE ) );
             }
         }
     }
