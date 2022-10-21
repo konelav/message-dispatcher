@@ -1102,6 +1102,7 @@ function check_mailboxes() {
         if ( $src_email == $config[ 'email' ] ) {
             log_debug( __FILE__, __LINE__, 'Fetching mails from single address ' . $config[ 'email' ] );
             $mails = process_incoming_mails( $mbox, $config[ 'sources' ] ?? [] );
+            $src_mbox = null;
             $src_mails = $mails;
         }
         else {
@@ -1166,6 +1167,8 @@ function check_mailboxes() {
         }
         
         imap_close( $mbox );
+        if ( ! is_null( $src_mbox ) )
+            imap_close( $src_mbox );
         if ( ! is_null( $ftp ) )
             ftp_close( $ftp );
     }
