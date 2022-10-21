@@ -5,6 +5,9 @@
         "email": "dispatch@domain.org",
         "password": "<PASSWORD>",
         
+        "src_email": "notify@domain.org",
+        "src_password": "<PASSWORD>",
+        
         "subject": "Mailing list",
         "url-prefix": "https://domain.org/message-dispatcher",
         

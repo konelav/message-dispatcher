@@ -7,7 +7,7 @@ define("CONFIG_PATH", "config.json");
 define("STATE_PATH", "state.json");
 
 define("LOG_PATH", "dispatch.log");
-define("LOG_LEVEL", 3);
+define("LOG_LEVEL", 4);
 define("LOG_TO_STDOUT", false);
 
 
@@ -79,6 +79,9 @@ function log_info( $file, $nline, $msg ) {
 }
 function log_debug( $file, $nline, $msg ) {
     tolog( $file, $nline,  '(debug) ' . $msg, 4);
+}
+function log_lldebug( $file, $nline, $msg ) {
+    tolog( $file, $nline,  '(lldebug) ' . $msg, 5);
 }
 
 
@@ -177,7 +180,7 @@ function read_json($path) {
         $file = fopen($path, 'r');
         if ( flock( $file, LOCK_SH ) ) {
             $contents = fread( $file, filesize( $path ) );
-            log_debug( __FILE__, __LINE__, 'Read JSON file ' . $path . ': ' . strlen($contents) . ' byte(s)' );
+            log_lldebug( __FILE__, __LINE__, 'Read JSON file ' . $path . ': ' . strlen($contents) . ' byte(s)' );
             $ret = json_decode( $contents, true );
         }
         else
@@ -194,7 +197,7 @@ function update_json($path, $changes, $flags = JSON_PRETTY_PRINT | JSON_UNESCAPE
     $path = local_dispatcher_path( $path );
     $data = read_json( $path );
     if ( ! update_array( $data, $changes ) ) {
-        log_debug( __FILE__, __LINE__, 'Data of JSON file ' . $path . ' unchanged' );
+        log_lldebug( __FILE__, __LINE__, 'Data of JSON file ' . $path . ' unchanged' );
         return true;
     }
     try {
@@ -282,15 +285,18 @@ function mime_encode($string, $encoding = 'UTF-8') {
 /***************************
  * IMAP interface wrappers *
  ***************************/
-function fetch_and_decode($mbox, $msguid, $part, $npart) {
-    log_debug( __FILE__, __LINE__, 'Fetching msg ' . $msguid . ', part ' . $npart );
-    $data = imap_fetchbody( $mbox, $msguid, $npart, FT_UID );
-    if ( $part->encoding == 3 ) {
+function decode_data($data, $encoding) {
+    if ( $encoding == 3 ) {
         $data = base64_decode( $data );
-    } elseif ( $part->encoding == 4 ) {
+    } elseif ( $encoding == 4 ) {
         $data = quoted_printable_decode( $data );
     }
     return $data;
+}
+function fetch_and_decode($mbox, $msguid, $part, $npart) {
+    log_debug( __FILE__, __LINE__, 'Fetching msg ' . $msguid . ', part ' . $npart );
+    $data = imap_fetchbody( $mbox, $msguid, $npart, FT_UID );
+    return decode_data( $data, $part->encoding );
 }
 
 function fetch_mail($mbox, $msguid, $ignore_attachments = false) {
@@ -305,7 +311,8 @@ function fetch_mail($mbox, $msguid, $ignore_attachments = false) {
     
     if ( ! property_exists($structure, 'parts') ) {
         log_debug( __FILE__, __LINE__, 'No parts, just plaintext or html' );
-        $contents[ 'PLAIN' ] = strip_tags( imap_utf8(imap_body($mbox, $msguid, FT_UID)) );
+        $body = decode_data( imap_body($mbox, $msguid, FT_UID), $structure->encoding );
+        $contents[ 'PLAIN' ] = strip_tags( imap_utf8($body) );
     }
     else {
         log_debug( __FILE__, __LINE__, 'Found ' . count($structure->parts) . ' part(s)' );
@@ -1085,13 +1092,25 @@ function check_mailboxes() {
         if ( is_null($imap) || ($config[ 'disabled' ] ?? false) )
             continue;
         
-        log_debug( __FILE__, __LINE__, 'Checking mailbox for ' . $dispatcher );
+        log_debug( __FILE__, __LINE__, 'Checking dispatcher ' . $dispatcher );
         
         $mbox = imap_open('{' . $imap . '}INBOX', $config[ 'email' ], $config[ 'password' ]);
         $mailer = create_phpmailer( $config );
         $ftp = null;
-        
-        $mails = process_incoming_mails( $mbox, $config[ 'sources' ] ?? [] );
+
+        $src_email = $config[ 'src_email' ] ?? $config[ 'email' ];
+        if ( $src_email == $config[ 'email' ] ) {
+            log_debug( __FILE__, __LINE__, 'Fetching mails from single address ' . $config[ 'email' ] );
+            $mails = process_incoming_mails( $mbox, $config[ 'sources' ] ?? [] );
+            $src_mails = $mails;
+        }
+        else {
+            log_debug( __FILE__, __LINE__, 'Fetching sub/unsub mails from ' . $config[ 'email' ] );
+            $mails = process_incoming_mails( $mbox, [] );
+            $src_mbox = imap_open('{' . $imap . '}INBOX', $config[ 'src_email' ], $config[ 'src_password' ] ?? $config[ 'password' ]);
+            log_debug( __FILE__, __LINE__, 'Fetching source mails from ' . $config[ 'src_email' ] );
+            $src_mails = process_incoming_mails( $src_mbox, $config[ 'sources' ] ?? [] );
+        }
         
         foreach ( ( $mails[ 'sub' ] ?? [] ) as $sub ) {
             $address = $sub[ 'address' ];
@@ -1126,7 +1145,7 @@ function check_mailboxes() {
             }
         }
         
-        foreach ( ( $mails[ 'dispatch' ] ?? [] ) as $mail ) {
+        foreach ( ( $src_mails[ 'dispatch' ] ?? [] ) as $mail ) {
             if ( count( $mail[ 'attachments' ] ) > 0 && is_null( $ftp ) && array_key_exists( 'ftp', $config ) ) {
                 log_debug( __FILE__, __LINE__, 'Creating FTP connection to ' . $config[ 'ftp' ][ 'host' ] );
                 $ftp = ftp_connect( $config[ 'ftp' ][ 'host' ] );
@@ -1134,7 +1153,7 @@ function check_mailboxes() {
                 ftp_pasv($ftp, true);
             }
             
-            $subject = '(' . $config[ 'subject' ] . ', ' . $mail[ 'from' ] . ') ';
+            $subject = '(' . $config[ 'subject' ] . ') ';
             if ( strlen( $mail[ 'subject' ] ) > 0 )
                 $subject .= $mail[ 'subject' ];
             

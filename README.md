@@ -36,11 +36,15 @@ instance. Available options to be configured:
 2. `email`: mailbox address for emails, both incoming and outcoming.
 3. `password`: mailbox password to be used for authentication (with both
     SMTP and IMAP connections, see below).
-4. `subject`: arbitrary string to be added to messages being dispatched;
-5. `url-prefix`: host and path to location of dispatcher files, needed
+4. `src_email`: (optional) mailbox for mails from `sources` addresses to be
+    dispatched (if it differs from `email`).
+5. `src_password`: (optional) password for `src_email` (if it differs from
+    `password`).
+6. `subject`: arbitrary string to be added to messages being dispatched;
+7. `url-prefix`: host and path to location of dispatcher files, needed
     to deduce correct webhook URL and sharing attachments;
-6. `attachments-dir`: subdirectory name where attachments will be stored;
-7. `ftp`: (optional object) specifies FTP-connection for uploading
+8. `attachments-dir`: subdirectory name where attachments will be stored;
+9. `ftp`: (optional object) specifies FTP-connection for uploading
     attachments to remote server;
     
         7.1 `ftp.dir`: remote directory where to upload attachments;
@@ -48,7 +52,7 @@ instance. Available options to be configured:
         7.3 `ftp.username`: FTP-server login username;
         7.4 `ftp.password`: FTP-server login password;
     
-8. `smtp`: (optional object) specifies SMTP-connection for sending
+10. `smtp`: (optional object) specifies SMTP-connection for sending
     emails (if it is abscent, `imap_mail()` will be used);
     
         8.1 `smtp.host`: SMTP-server hostname;
@@ -58,14 +62,14 @@ instance. Available options to be configured:
         8.4 `smtp.tls`: (optional object) options for PHPMailer when using
             ENCRYPTION_STARTTLS encryption mode;
         
-9. `sources`: list of legitimate addresses, emails from them will be
+11. `sources`: list of legitimate addresses, emails from them will be
     dispatched (broadcasted) to all subscribers;
-10. `imap`: string for configuring IMAP connection, see `imap_open()`
+12. `imap`: string for configuring IMAP connection, see `imap_open()`
     PHP documentation;
-11. `viber-bot`: (optional) auth token for Viber Bot API;
-12. `viber-chat`: (optional) auth token for Viber Channel Post API;
-13. `tg-bot`: (optional) auth token for Telegram Bot API;
-14. `viber_bot_welcome_message`: (optional) message that will be sent
+13. `viber-bot`: (optional) auth token for Viber Bot API;
+14. `viber-chat`: (optional) auth token for Viber Channel Post API;
+15. `tg-bot`: (optional) auth token for Telegram Bot API;
+16. `viber_bot_welcome_message`: (optional) message that will be sent
     when conversation started with new unsubscribed user.
 
 
