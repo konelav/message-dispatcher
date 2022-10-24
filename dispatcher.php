@@ -281,10 +281,6 @@ function mime_encode($string, $encoding = 'UTF-8') {
     return $string;
 }
 
-
-/***************************
- * IMAP interface wrappers *
- ***************************/
 function decode_data($data, $encoding) {
     if ( $encoding == 3 ) {
         $data = base64_decode( $data );
@@ -293,6 +289,15 @@ function decode_data($data, $encoding) {
     }
     return $data;
 }
+
+function html2text($html) {
+    return preg_replace( "/\n\s+/", "\n", rtrim(html_entity_decode(strip_tags($html))) );
+}
+
+
+/***************************
+ * IMAP interface wrappers *
+ ***************************/
 function fetch_and_decode($mbox, $msguid, $part, $npart) {
     log_debug( __FILE__, __LINE__, 'Fetching msg ' . $msguid . ', part ' . $npart );
     $data = imap_fetchbody( $mbox, $msguid, $npart, FT_UID );
@@ -312,7 +317,7 @@ function fetch_mail($mbox, $msguid, $ignore_attachments = false) {
     if ( ! property_exists($structure, 'parts') ) {
         log_debug( __FILE__, __LINE__, 'No parts, just plaintext or html' );
         $body = decode_data( imap_body($mbox, $msguid, FT_UID), $structure->encoding );
-        $contents[ 'PLAIN' ] = strip_tags( imap_utf8($body) );
+        $contents[ 'PLAIN' ] = html2text( imap_utf8($body) );
     }
     else {
         log_debug( __FILE__, __LINE__, 'Found ' . count($structure->parts) . ' part(s)' );
@@ -362,7 +367,7 @@ function fetch_mail($mbox, $msguid, $ignore_attachments = false) {
             }
             else {
                 log_debug( __FILE__, __LINE__, 'Part #' . $npart . ' is plaintext or html' );
-                $contents[ 'PLAIN' ] = strip_tags( fetch_and_decode($mbox, $msguid, $part, $npart + 1) );
+                $contents[ 'PLAIN' ] = html2text( fetch_and_decode($mbox, $msguid, $part, $npart + 1) );
             }
         }
     }
@@ -419,7 +424,7 @@ function process_incoming_mail($mbox, $msguid, $sources) {
 
 function process_incoming_mails($mbox, $sources) {
     $msgs = imap_sort($mbox, SORTDATE, false, SE_UID);
-    log_debug( __FILE__, __LINE__, 'Total messages: ' . count($msgs) );
+    log_lldebug( __FILE__, __LINE__, 'Total messages: ' . count($msgs) );
     if ( count($msgs) == 0 )
         return [];
     
@@ -434,11 +439,13 @@ function process_incoming_mails($mbox, $sources) {
         
         if ( count( $res ) == 0 ) {
             log_debug(__FILE__, __LINE__, "imap_mail_move($mbox, strval($msguid), 'Junk', CP_UID);");
-            imap_mail_move($mbox, strval($msguid), 'Junk', CP_UID);
+            if ( ! imap_mail_move($mbox, strval($msguid), 'Junk', CP_UID) )
+                log_error(__FILE__, __LINE__, 'Can\'t move mail to Junk folder');
         }
         else {
             log_debug(__FILE__, __LINE__, "imap_mail_move($mbox, strval($msguid), 'Trash', CP_UID);");
-            imap_mail_move($mbox, strval($msguid), 'Trash', CP_UID);
+            if ( ! imap_mail_move($mbox, strval($msguid), 'Trash', CP_UID) )
+                log_error(__FILE__, __LINE__, 'Can\'t move mail to Trash folder');
         }
     }
     imap_expunge($mbox);
@@ -642,7 +649,7 @@ function send_mail_generic($mbox, $mailer, $from, $to, $subject, $text, $files =
 /********************
  * API call helpers *
  ********************/
-function http_json_call( $url, $data, $headers = [], $loglevel = 4 ) {
+function http_json_call( $url, $data, $headers = [], $loglevel = 5 ) {
     if ( is_null( $data ) || count( $data ) == 0 )
         $content = '{}';
     else
@@ -674,13 +681,14 @@ function http_json_call( $url, $data, $headers = [], $loglevel = 4 ) {
 /*********************************************************
  * Telegram bot API [https://core.telegram.org/bots/api] *
  *********************************************************/
-function tg_call( $token, $method, $data ) {
+function tg_call( $token, $method, $data, $loglevel = 4 ) {
     if ( is_null($token) )
         return [];
     return http_json_call(
         'https://api.telegram.org/bot' . $token . '/' . $method,
         $data,
-        []
+        [],
+        $loglevel
     );
 }
 
@@ -714,7 +722,7 @@ function tg_broadcast_file( $token, $file, $chat_ids ) {
 /***********************************************************************
  * Viber bot API [https://developers.viber.com/docs/api/rest-bot-api/] *
  ***********************************************************************/
-function viber_bot_call( $token, $method, $data, $loglevel = 3 ) {
+function viber_bot_call( $token, $method, $data, $loglevel = 4 ) {
     if ( is_null($token) )
         return [];
     return http_json_call(
@@ -753,7 +761,7 @@ function viber_bot_broadcast_file( $token, $file, $sender, $ids ) {
 /***************************************************************************************
  * Viber channel post API [https://developers.viber.com/docs/tools/channels-post-api/] *
  ***************************************************************************************/
-function viber_chat_call( $token, $method, $data, $loglevel = 3 ) {
+function viber_chat_call( $token, $method, $data, $loglevel = 4 ) {
     if ( is_null($token) )
         return [];
     $data[ 'auth_token' ] = $token;
@@ -953,7 +961,7 @@ function viber_handle_webhook( $headers, $body ) {
                   !is_null( $welcome = $config[ 'viber_bot_welcome_message' ] ?? null ) ) {
             $uid = $message[ 'user_id' ];
             if ( ! in_array( $uid, $subs ) ) {
-                log_info( __FILE__, __LINE__, 'Add new subscriber for ' . $dispatcher . ': ' . $uid);
+                log_info( __FILE__, __LINE__, 'New conversation started for ' . $dispatcher . ': ' . $uid);
                 $response = [
                     'type' => 'text',
                     'sender' => ['name' => $dispatcher],
@@ -1025,12 +1033,12 @@ function tg_check_updates() {
         $ret = tg_call($token, 'getUpdates', [
             'offset' => $last_update_id + 1,
             'allowed_updates' => ( $config['tg_allowed_updates'] ?? [] )
-        ]);
+        ], 5);
 
         if ( count( $ret[ 'result' ] ?? [] ) == 0 )
             continue;
         
-        log_info(__FILE__, __LINE__, 'New telegram updates for disaptcher ' . $dispatcher . ': ' . 
+        log_debug(__FILE__, __LINE__, 'New telegram updates for disaptcher ' . $dispatcher . ': ' . 
             count($ret[ 'result' ]) . ";\n" .  '    ' . json_encode( $ret, JSON_UNESCAPED_UNICODE ) );
         
         foreach ( $ret[ 'result' ] as $update ) {
@@ -1100,16 +1108,16 @@ function check_mailboxes() {
 
         $src_email = $config[ 'src_email' ] ?? $config[ 'email' ];
         if ( $src_email == $config[ 'email' ] ) {
-            log_debug( __FILE__, __LINE__, 'Fetching mails from single address ' . $config[ 'email' ] );
+            log_lldebug( __FILE__, __LINE__, 'Fetching mails from single address ' . $config[ 'email' ] );
             $mails = process_incoming_mails( $mbox, $config[ 'sources' ] ?? [] );
             $src_mbox = null;
             $src_mails = $mails;
         }
         else {
-            log_debug( __FILE__, __LINE__, 'Fetching sub/unsub mails from ' . $config[ 'email' ] );
+            log_lldebug( __FILE__, __LINE__, 'Fetching sub/unsub mails from ' . $config[ 'email' ] );
             $mails = process_incoming_mails( $mbox, [] );
             $src_mbox = imap_open('{' . $imap . '}INBOX', $config[ 'src_email' ], $config[ 'src_password' ] ?? $config[ 'password' ]);
-            log_debug( __FILE__, __LINE__, 'Fetching source mails from ' . $config[ 'src_email' ] );
+            log_lldebug( __FILE__, __LINE__, 'Fetching source mails from ' . $config[ 'src_email' ] );
             $src_mails = process_incoming_mails( $src_mbox, $config[ 'sources' ] ?? [] );
         }
         
