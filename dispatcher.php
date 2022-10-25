@@ -282,15 +282,16 @@ function mime_encode($string, $encoding = 'UTF-8') {
 }
 
 function decode_data($data, $encoding) {
-    if ( $encoding == 3 ) {
+    if ( $encoding == ENCBASE64 ) {
         $data = base64_decode( $data );
-    } elseif ( $encoding == 4 ) {
+    } elseif ( $encoding == ENCQUOTEDPRINTABLE ) {
         $data = quoted_printable_decode( $data );
     }
     return $data;
 }
 
 function html2text($html) {
+    $html = preg_replace( '/<br\\s*?\/??>/i', "\n", $html );
     return preg_replace( "/\n\s+/", "\n", rtrim(html_entity_decode(strip_tags($html))) );
 }
 
@@ -316,8 +317,11 @@ function fetch_mail($mbox, $msguid, $ignore_attachments = false) {
     
     if ( ! property_exists($structure, 'parts') ) {
         log_debug( __FILE__, __LINE__, 'No parts, just plaintext or html' );
-        $body = decode_data( imap_body($mbox, $msguid, FT_UID), $structure->encoding );
-        $contents[ 'PLAIN' ] = html2text( imap_utf8($body) );
+        $text = imap_utf8( decode_data( imap_body($mbox, $msguid, FT_UID), $structure->encoding ) );
+        if ( strtolower($structure->subtype) == 'plain' )
+            $contents[ 'PLAIN' ] = $text;
+        elseif ( ! in_array('PLAIN', $contents) )
+            $contents[ 'PLAIN' ] = html2text( $text );
     }
     else {
         log_debug( __FILE__, __LINE__, 'Found ' . count($structure->parts) . ' part(s)' );
@@ -367,7 +371,11 @@ function fetch_mail($mbox, $msguid, $ignore_attachments = false) {
             }
             else {
                 log_debug( __FILE__, __LINE__, 'Part #' . $npart . ' is plaintext or html' );
-                $contents[ 'PLAIN' ] = html2text( fetch_and_decode($mbox, $msguid, $part, $npart + 1) );
+                $text = fetch_and_decode($mbox, $msguid, $part, $npart + 1);
+                if ( strtolower($part->subtype) == 'plain' )
+                    $contents[ 'PLAIN' ] = $text;
+                elseif ( ! in_array('PLAIN', $contents) )
+                    $contents[ 'PLAIN' ] = html2text( $text );
             }
         }
     }
