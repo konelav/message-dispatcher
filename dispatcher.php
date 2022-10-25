@@ -588,9 +588,16 @@ function create_phpmailer($config, $default_port = 25) {
         }
         $mailer = new PHPMailer(true);
         $mailer->isSMTP();
+        $mailer->SMTPDebug = $smtp[ 'loglevel' ] ?? SMTP::DEBUG_OFF;
+        $mailer->Debugoutput = function($str, $level) {
+            log_info( __FILE__, __LINE__, "SMTP message [$level]: $str");
+        };
         $mailer->Host = $host;
         $mailer->Port = $smtp[ 'port' ] ?? $default_port;
-        if ( in_array( 'ssl', $smtp ) ) {
+        if ( ! extension_loaded('openssl') ) {
+            log_debug( __FILE__, __LINE__, 'openssl extension not available' );
+        }
+        elseif ( in_array( 'ssl', $smtp ) ) {
             $mailer->SMTPSecure =  PHPMailer::ENCRYPTION_SMTPS;
             $mail->SMTPOptions = [
                 'ssl' => $smtp[ 'ssl' ]
@@ -604,7 +611,6 @@ function create_phpmailer($config, $default_port = 25) {
         }
         $mailer->SMTPAuth = true;
         $mailer->SMTPKeepAlive = true;
-        $mailer->Port = intval( $parts[1] ?? $default_port );
         $mailer->Username = $smtp[ 'username' ] ?? $config[ 'email' ];
         $mailer->Password = $smtp[ 'password' ] ?? $config[ 'password' ];
         $mailer->CharSet = 'UTF-8';
@@ -1185,6 +1191,8 @@ function check_mailboxes() {
         imap_close( $mbox );
         if ( ! is_null( $src_mbox ) )
             imap_close( $src_mbox );
+        if ( ! is_null( $mailer ) )
+            $mailer->smtpClose();
         if ( ! is_null( $ftp ) )
             ftp_close( $ftp );
     }
