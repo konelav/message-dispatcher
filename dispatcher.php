@@ -255,6 +255,10 @@ function zip_dir( $dirpath, $zippath ) {
 /*******************************
  * Helpers for e-mail handling *
  *******************************/
+function imap_utf8_fix($s) {
+    return iconv_mime_decode( $s, 0, 'UTF-8' );
+}
+
 function extract_emails($s) {
     $pattern = '/[a-z0-9_\-\+\.]+@[a-z0-9\-]+\.([a-z]{2,4})(?:\.[a-z]{2})?/i';
     preg_match_all( $pattern, $s, $matches );
@@ -291,8 +295,13 @@ function decode_data($data, $encoding) {
 }
 
 function html2text($html) {
-    $html = preg_replace( '/<br\\s*?\/??>/i', "\n", $html );
-    return preg_replace( "/\n\s+/", "\n", rtrim(html_entity_decode(strip_tags($html))) );
+    log_debug( __FILE__, __LINE__, 'html2text( ' . $html . ')' );
+    $html = preg_replace( '/<br\\s*>/i', "\n", $html );
+    $html = preg_replace( '/<br\\s*\/>/i', "\n", $html );
+    $html = preg_replace( '/<\/div>\\s*<div>/i', "\n", $html );
+    $text = preg_replace( "/\n\s+/", "\n", rtrim(html_entity_decode(strip_tags($html))) );
+    log_debug( __FILE__, __LINE__, ' => ' . $text );
+    return $text;
 }
 
 
@@ -309,15 +318,15 @@ function fetch_mail($mbox, $msguid, $ignore_attachments = false) {
     log_debug( __FILE__, __LINE__, 'Fetching mail msg ' . $msguid );
     
     $overview = imap_fetch_overview($mbox, $msguid, FT_UID)[0];
-    $subject = imap_utf8($overview->subject ?? '');
+    $subject = imap_utf8_fix($overview->subject ?? '');
     $structure = imap_fetchstructure($mbox, $msguid, FT_UID);
     
     $attachments = [];
     $contents = [];
     
     if ( ! property_exists($structure, 'parts') ) {
-        log_debug( __FILE__, __LINE__, 'No parts, just plaintext or html' );
-        $text = imap_utf8( decode_data( imap_body($mbox, $msguid, FT_UID), $structure->encoding ) );
+        log_debug( __FILE__, __LINE__, 'No parts, just plaintext or html [subtype = ' . $structure->subtype . ']' );
+        $text = imap_utf8_fix( decode_data( imap_body($mbox, $msguid, FT_UID), $structure->encoding ) );
         if ( strtolower($structure->subtype) == 'plain' )
             $contents[ 'PLAIN' ] = $text;
         elseif ( ! in_array('PLAIN', $contents) )
@@ -339,7 +348,7 @@ function fetch_mail($mbox, $msguid, $ignore_attachments = false) {
                 foreach ($part->dparameters as $object) {
                     if (strtolower($object->attribute) == 'filename') {
                         $is_attachment = true;
-                        $filename = imap_utf8($object->value);
+                        $filename = imap_utf8_fix($object->value);
                         break;
                     }
                 }
@@ -348,7 +357,7 @@ function fetch_mail($mbox, $msguid, $ignore_attachments = false) {
                 foreach ($part->parameters as $object) {
                     if (strtolower($object->attribute) == 'name') {
                         $is_attachment = true;
-                        $name = imap_utf8($object->value);
+                        $name = imap_utf8_fix($object->value);
                         break;
                     }
                 }
@@ -370,7 +379,7 @@ function fetch_mail($mbox, $msguid, $ignore_attachments = false) {
                 }
             }
             else {
-                log_debug( __FILE__, __LINE__, 'Part #' . $npart . ' is plaintext or html' );
+                log_debug( __FILE__, __LINE__, 'Part #' . $npart . ' is plaintext or html [subtype = ' . $part->subtype . ']' );
                 $text = fetch_and_decode($mbox, $msguid, $part, $npart + 1);
                 if ( strtolower($part->subtype) == 'plain' )
                     $contents[ 'PLAIN' ] = $text;
@@ -406,7 +415,7 @@ function find_special_lines($contents, $specials) {
 
 function process_incoming_mail($mbox, $msguid, $sources) {
     $header = imap_rfc822_parse_headers( imap_fetchheader( $mbox, $msguid, FT_UID ) );
-    $from = extract_emails( imap_utf8( $header->fromaddress ) )[0];
+    $from = extract_emails( imap_utf8_fix( $header->fromaddress ) )[0];
     $is_dispatch_source = in_array( $from, $sources );
     
     log_debug( __FILE__, __LINE__, 'Processing message from [source: ' . ($is_dispatch_source ? 'yes' : 'no') .'] ' . $from );
@@ -727,7 +736,7 @@ function tg_broadcast_file( $token, $file, $chat_ids ) {
         return tg_broadcast( $token, 'sendVideo', $chat_ids, ['video' => $file['url']] );
     if (preg_match('/\.(mp3|wav|mid)$/', $name))
         return tg_broadcast( $token, 'sendAudio', $chat_ids, ['audio' => $file['url']] );
-    if (preg_match('/\.(zip|rar|7z)$/', $name))
+    if (preg_match('/\.(zip|gif|pdf)$/', $name))
         return tg_broadcast( $token, 'sendDocument', $chat_ids, ['document' => $file['url']] );
     return false;
 }
@@ -765,7 +774,7 @@ function viber_bot_broadcast_file( $token, $file, $sender, $ids ) {
         return viber_bot_broadcast( $token, $ids, [
                 'type' => 'video', 'media' => $file['url'], 'size' => $file['size'], 'sender' => ['name' => $sender]
             ]);
-    if (preg_match('/\.(zip|rar|7z)$/', $name))
+    if (preg_match('/\.(zip|rar|7z|pdf|doc|docx|xls|xlsx|ppt|pptx|odt|ods|odp)$/', $name))
         return viber_bot_broadcast( $token, $ids, [
                 'type' => 'file', 'media' => $file['url'], 'file_name' => $name, 'size' => $file['size'], 'sender' => ['name' => $sender]
             ]);
@@ -819,7 +828,7 @@ function viber_chat_file( $token, $file, $sender ) {
         return viber_chat_call( $token, 'post', [
                 'type' => 'video', 'media' => $file['url'], 'size' => $file['size'], 'from' => $sender
             ]);
-    if (preg_match('/\.(zip|rar|7z)$/', $name))
+    if (preg_match('/\.(zip|rar|7z|pdf|doc|docx|xls|xlsx|ppt|pptx|odt|ods|odp)$/', $name))
         return viber_chat_call( $token, 'post', [
                 'type' => 'file', 'media' => $file['url'], 'file_name' => $name, 'size' => $file['size'], 'from' => $sender
             ]);
@@ -973,7 +982,7 @@ function viber_handle_webhook( $headers, $body ) {
         }
         elseif ( ( $message[ 'event' ] == 'conversation_started' ) &&
                   !is_null( $welcome = $config[ 'viber_bot_welcome_message' ] ?? null ) ) {
-            $uid = $message[ 'user_id' ];
+            $uid = $message[ 'user' ][ 'id' ];
             if ( ! in_array( $uid, $subs ) ) {
                 log_info( __FILE__, __LINE__, 'New conversation started for ' . $dispatcher . ': ' . $uid);
                 $response = [
