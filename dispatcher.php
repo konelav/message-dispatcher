@@ -298,7 +298,10 @@ function html2text($html) {
     log_debug( __FILE__, __LINE__, 'html2text( ' . $html . ')' );
     $html = preg_replace( '/<br\\s*>/i', "\n", $html );
     $html = preg_replace( '/<br\\s*\/>/i', "\n", $html );
-    $html = preg_replace( '/<\/div>\\s*<div>/i', "\n", $html );
+    $html = preg_replace( '/<div>/i', "\n", $html );
+    $html = preg_replace( '/<\/div>/i', "\n", $html );
+    $html = preg_replace( '/<p>/i', "\n", $html );
+    $html = preg_replace( '/<\/p>/i', "\n", $html );
     $text = preg_replace( "/\n\s+/", "\n", rtrim(html_entity_decode(strip_tags($html))) );
     log_debug( __FILE__, __LINE__, ' => ' . $text );
     return $text;
@@ -326,7 +329,11 @@ function fetch_mail($mbox, $msguid, $ignore_attachments = false) {
     
     if ( ! property_exists($structure, 'parts') ) {
         log_debug( __FILE__, __LINE__, 'No parts, just plaintext or html [subtype = ' . $structure->subtype . ']' );
-        $text = imap_utf8_fix( decode_data( imap_body($mbox, $msguid, FT_UID), $structure->encoding ) );
+        $text = imap_utf8( decode_data( imap_body($mbox, $msguid, FT_UID), $structure->encoding ) );
+        if ( strtolower($structure->subtype) == 'delivery-status' ) {
+            log_info( __FILE__, __LINE__, 'Delivery status received, ignoring: ' . $text );
+            return [];
+        }
         if ( strtolower($structure->subtype) == 'plain' )
             $contents[ 'PLAIN' ] = $text;
         elseif ( ! in_array('PLAIN', $contents) )
@@ -381,6 +388,10 @@ function fetch_mail($mbox, $msguid, $ignore_attachments = false) {
             else {
                 log_debug( __FILE__, __LINE__, 'Part #' . $npart . ' is plaintext or html [subtype = ' . $part->subtype . ']' );
                 $text = fetch_and_decode($mbox, $msguid, $part, $npart + 1);
+                if ( strtolower($part->subtype) == 'delivery-status' ) {
+                    log_info( __FILE__, __LINE__, 'Delivery status received, ignoring: ' . $text );
+                    return [];
+                }
                 if ( strtolower($part->subtype) == 'plain' )
                     $contents[ 'PLAIN' ] = $text;
                 elseif ( ! in_array('PLAIN', $contents) )
@@ -421,6 +432,8 @@ function process_incoming_mail($mbox, $msguid, $sources) {
     log_debug( __FILE__, __LINE__, 'Processing message from [source: ' . ($is_dispatch_source ? 'yes' : 'no') .'] ' . $from );
     
     $mail = fetch_mail( $mbox, $msguid, ! $is_dispatch_source );
+    if ( count( $mail ) == 0 )
+        return [];
     
     if ( $is_dispatch_source ) {
         $mail[ 'from' ] = $from;
