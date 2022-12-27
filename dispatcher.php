@@ -324,6 +324,8 @@ function fetch_mail($mbox, $msguid, $ignore_attachments = false) {
     $subject = imap_utf8_fix($overview->subject ?? '');
     $structure = imap_fetchstructure($mbox, $msguid, FT_UID);
     
+    $subject = preg_replace( '/\\*\\*\\*SPAM\\*\\*\\*/i', '', $subject );
+    
     $attachments = [];
     $contents = [];
     
@@ -336,7 +338,7 @@ function fetch_mail($mbox, $msguid, $ignore_attachments = false) {
         }
         if ( strtolower($structure->subtype) == 'plain' )
             $contents[ 'PLAIN' ] = $text;
-        elseif ( ! in_array('PLAIN', $contents) )
+        elseif ( ! array_key_exists('PLAIN', $contents) )
             $contents[ 'PLAIN' ] = html2text( $text );
     }
     else {
@@ -394,7 +396,7 @@ function fetch_mail($mbox, $msguid, $ignore_attachments = false) {
                 }
                 if ( strtolower($part->subtype) == 'plain' )
                     $contents[ 'PLAIN' ] = $text;
-                elseif ( ! in_array('PLAIN', $contents) )
+                elseif ( ! array_key_exists('PLAIN', $contents) )
                     $contents[ 'PLAIN' ] = html2text( $text );
             }
         }
@@ -619,13 +621,13 @@ function create_phpmailer($config, $default_port = 25) {
         if ( ! extension_loaded('openssl') ) {
             log_debug( __FILE__, __LINE__, 'openssl extension not available' );
         }
-        elseif ( in_array( 'ssl', $smtp ) ) {
+        elseif ( array_key_exists( 'ssl', $smtp ) ) {
             $mailer->SMTPSecure =  PHPMailer::ENCRYPTION_SMTPS;
             $mail->SMTPOptions = [
                 'ssl' => $smtp[ 'ssl' ]
             ];
         }
-        elseif ( in_array( 'tls', $smtp ) ) {
+        elseif ( array_key_exists( 'tls', $smtp ) ) {
             $mailer->SMTPSecure =  PHPMailer::ENCRYPTION_STARTTLS;
             $mail->SMTPOptions = [
                 'ssl' => $smtp[ 'tls' ]
